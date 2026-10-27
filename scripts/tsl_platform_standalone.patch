@@ -1,0 +1,160 @@
+diff --git a/csrc/xla/tsl/platform/env.h b/csrc/xla/tsl/platform/env.h
+index 70af118..b26c0a2 100644
+--- a/csrc/xla/tsl/platform/env.h
++++ b/csrc/xla/tsl/platform/env.h
+@@ -29,14 +29,11 @@ limitations under the License.
+ #include "absl/status/status.h"
+ #include "absl/strings/ascii.h"
+ #include "absl/strings/string_view.h"
+-#include "google/protobuf/message.h"
+-#include "google/protobuf/message_lite.h"
+ #include "xla/tsl/platform/env_time.h"
+ #include "xla/tsl/platform/file_statistics.h"
+ #include "xla/tsl/platform/file_system.h"
+ #include "xla/tsl/platform/macros.h"
+ #include "tsl/platform/numa.h"
+-#include "tsl/platform/protobuf.h"
+ 
+ // Delete leaked Windows definitions.
+ #ifdef PLATFORM_WINDOWS
+@@ -663,41 +660,6 @@ absl::Status WriteStringToFile(Env* env, const std::string& fname,
+ absl::Status AppendStringToFile(Env* env, const std::string& fname,
+                                 absl::string_view data);
+ 
+-/// Write binary representation of "proto" to the named file.
+-absl::Status WriteBinaryProto(Env* env, const std::string& fname,
+-                              const protobuf::MessageLite& proto);
+-
+-/// Reads contents of named file and parse as binary encoded proto data
+-/// and store into `*proto`.
+-absl::Status ReadBinaryProto(Env* env, const std::string& fname,
+-                             protobuf::MessageLite* proto);
+-
+-/// Write the text representation of "proto" to the named file.
+-inline absl::Status WriteTextProto(Env* /* env */,
+-                                   const std::string& /* fname */,
+-                                   const protobuf::MessageLite& /* proto */) {
+-  return absl::UnimplementedError("Can't write text protos with protolite.");
+-}
+-absl::Status WriteTextProto(Env* env, const std::string& fname,
+-                            const protobuf::Message& proto);
+-
+-/// Read contents of named file and parse as text encoded proto data
+-/// and store into `*proto`.
+-inline absl::Status ReadTextProto(Env* /* env */,
+-                                  const std::string& /* fname */,
+-                                  protobuf::MessageLite* /* proto */) {
+-  return absl::UnimplementedError("Can't parse text protos with protolite.");
+-}
+-absl::Status ReadTextProto(Env* env, const std::string& fname,
+-                           protobuf::Message* proto);
+-
+-/// Read contents of named file and parse as either text or binary encoded proto
+-/// data and store into `*proto`.
+-absl::Status ReadTextOrBinaryProto(Env* env, const std::string& fname,
+-                                   protobuf::Message* proto);
+-absl::Status ReadTextOrBinaryProto(Env* env, const std::string& fname,
+-                                   protobuf::MessageLite* proto);
+-
+ // START_SKIP_DOXYGEN
+ 
+ // The following approach to register filesystems is deprecated and will be
+diff --git a/csrc/xla/tsl/platform/errors.h b/csrc/xla/tsl/platform/errors.h
+index 10b86bb..4207961 100644
+--- a/csrc/xla/tsl/platform/errors.h
++++ b/csrc/xla/tsl/platform/errors.h
+@@ -37,27 +37,7 @@ limitations under the License.
+ 
+ namespace tsl {
+ namespace error {
+-// NOLINTBEGIN(misc-unused-using-decls)
+-// TODO(aminim): figure out the protobuf migration story.
+-using tensorflow::error::ABORTED;
+-using tensorflow::error::ALREADY_EXISTS;
+-using tensorflow::error::CANCELLED;
+-using tensorflow::error::Code;
+-using tensorflow::error::DATA_LOSS;
+-using tensorflow::error::DEADLINE_EXCEEDED;
+-using tensorflow::error::FAILED_PRECONDITION;
+-using tensorflow::error::INTERNAL;
+-using tensorflow::error::INVALID_ARGUMENT;
+-using tensorflow::error::NOT_FOUND;
+-using tensorflow::error::OK;
+-using tensorflow::error::OUT_OF_RANGE;
+-using tensorflow::error::PERMISSION_DENIED;
+-using tensorflow::error::RESOURCE_EXHAUSTED;
+-using tensorflow::error::UNAUTHENTICATED;
+-using tensorflow::error::UNAVAILABLE;
+-using tensorflow::error::UNIMPLEMENTED;
+-using tensorflow::error::UNKNOWN;
+-// NOLINTEND(misc-unused-using-decls)
++inline constexpr absl::StatusCode OK = absl::StatusCode::kOk;
+ }  // namespace error
+ 
+ namespace errors {
+diff --git a/csrc/xla/tsl/platform/status.h b/csrc/xla/tsl/platform/status.h
+index 63dabe9..fc31bf7 100644
+--- a/csrc/xla/tsl/platform/status.h
++++ b/csrc/xla/tsl/platform/status.h
+@@ -35,7 +35,6 @@ limitations under the License.
+ #include "xla/tsl/platform/macros.h"
+ #include "xla/tsl/platform/stack_frame.h"
+ #include "xla/tsl/platform/types.h"
+-#include "xla/tsl/protobuf/error_codes.pb.h"
+ #include "tsl/platform/platform.h"
+ 
+ // Include appropriate platform-dependent parts of status.
+@@ -60,39 +59,10 @@ namespace errors {
+ typedef absl::StatusCode Code ABSL_DEPRECATE_AND_INLINE();
+ }  // namespace errors
+ namespace error {
+-typedef ::tensorflow::error::Code Code;
++typedef absl::StatusCode Code;
+ }  // namespace error
+ }  // namespace tsl
+ 
+-// Transparent comparison between tensorflow::error::Code protobuf enum and
+-// absl::Status.
+-//
+-// The longer term objective is to delete these when we have done the transition
+-// to absl::Status.
+-namespace tensorflow::error {
+-inline bool operator==(const ::tensorflow::error::Code& c1,
+-                       const absl::StatusCode& c2) {
+-  return static_cast<int>(c1) == static_cast<int>(c2);
+-}
+-
+-inline bool operator!=(const ::tensorflow::error::Code& c1,
+-                       const absl::StatusCode& c2) {
+-  return static_cast<int>(c1) != static_cast<int>(c2);
+-}
+-}  // namespace tensorflow::error
+-
+-namespace absl {
+-inline bool operator==(const ::absl::StatusCode& c1,
+-                       const ::tensorflow::error::Code& c2) {
+-  return static_cast<int>(c1) == static_cast<int>(c2);
+-}
+-
+-inline bool operator!=(const ::absl::StatusCode& c1,
+-                       const ::tensorflow::error::Code& c2) {
+-  return static_cast<int>(c1) != static_cast<int>(c2);
+-}
+-}  // namespace absl
+-
+ namespace tsl {
+ 
+ // OkStatus()
+diff --git a/csrc/xla/tsl/platform/types.h b/csrc/xla/tsl/platform/types.h
+index 65c4575..624d8ae 100644
+--- a/csrc/xla/tsl/platform/types.h
++++ b/csrc/xla/tsl/platform/types.h
+@@ -22,8 +22,6 @@ limitations under the License.
+ 
+ #include "absl/base/const_init.h"
+ #include "absl/base/macros.h"
+-#include "tsl/platform/bfloat16.h"  // IWYU pragma: export
+-#include "tsl/platform/ml_dtypes.h"  // IWYU pragma: export
+ #include "tsl/platform/tstring.h"
+ 
+ namespace tsl {

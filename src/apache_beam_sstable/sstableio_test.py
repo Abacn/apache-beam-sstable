@@ -118,18 +118,17 @@ class SSTableIOTest(unittest.TestCase):
       )
       assert_that(actual, equal_to(expected))
 
-    # 2. Prefix filter + keys_only
-    expected_prefix_keys = [
-        k for k, _ in expected if k.startswith(b"key_0004")
+    # 2. Prefix filter
+    expected_prefix = [
+        (k, v) for k, v in expected if k.startswith(b"key_0004")
     ]
     with TestPipeline() as p:
-      prefix_keys = p | "ReadPrefixKeys" >> ReadFromSSTable(
+      prefix_records = p | "ReadPrefix" >> ReadFromSSTable(
           str(sst_path),
           min_bundle_size=1024,
           key_prefix=b"key_0004",
-          keys_only=True,
       )
-      assert_that(prefix_keys, equal_to(expected_prefix_keys))
+      assert_that(prefix_records, equal_to(expected_prefix))
 
     # 3. Key range filter [start_key, end_key)
     expected_range = [

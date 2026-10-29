@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 import functools
+import logging
 import os
 from typing import Any, Iterator, Optional, Union
 
@@ -39,7 +40,6 @@ from apache_beam_sstable.sstable import (
     SortingSSTableBuilder,
     SSTableReader,
 )
-
 
 def _is_local_path(path: str) -> bool:
   """Returns True if ``path`` refers to the local OS filesystem."""
@@ -68,7 +68,6 @@ class _SSTableSource(filebasedsource.FileBasedSource):
       key_prefix: Optional[bytes] = None,
       start_key: Optional[bytes] = None,
       end_key: Optional[bytes] = None,
-      keys_only: bool = False,
       use_mmap: bool = False,
   ) -> None:
     super().__init__(
@@ -88,7 +87,6 @@ class _SSTableSource(filebasedsource.FileBasedSource):
     self._key_prefix = key_prefix
     self._start_key = start_key
     self._end_key = end_key
-    self._keys_only = bool(keys_only)
     self._use_mmap = bool(use_mmap)
 
   def read_records(
@@ -151,18 +149,13 @@ class _SSTableSource(filebasedsource.FileBasedSource):
           start_key=self._start_key,
           end_key=self._end_key,
           key_prefix=self._key_prefix,
-          keys_only=self._keys_only,
       )
       for record in records:
         yield record
 
 
 class ReadFromSSTable(PTransform):
-  """A ``PTransform`` for reading SSTable files into a ``PCollection``.
-
-  By default, emits ``(key, value)`` tuples of ``(bytes, bytes)``. If
-  ``keys_only=True``, emits ``key`` (``bytes``) without copying values.
-  """
+  """A ``PTransform`` for reading SSTable files into a ``PCollection[(bytes, bytes)]``."""
 
   def __init__(
       self,
@@ -173,7 +166,6 @@ class ReadFromSSTable(PTransform):
       key_prefix: Optional[bytes] = None,
       start_key: Optional[bytes] = None,
       end_key: Optional[bytes] = None,
-      keys_only: bool = False,
       use_mmap: bool = False,
   ) -> None:
     super().__init__()
@@ -185,7 +177,6 @@ class ReadFromSSTable(PTransform):
         key_prefix=key_prefix,
         start_key=start_key,
         end_key=end_key,
-        keys_only=keys_only,
         use_mmap=use_mmap,
     )
 
@@ -204,7 +195,6 @@ class ReadAllFromSSTable(PTransform):
       key_prefix: Optional[bytes] = None,
       start_key: Optional[bytes] = None,
       end_key: Optional[bytes] = None,
-      keys_only: bool = False,
       use_mmap: bool = False,
       with_filename: bool = False,
   ) -> None:
@@ -217,7 +207,6 @@ class ReadAllFromSSTable(PTransform):
         key_prefix=key_prefix,
         start_key=start_key,
         end_key=end_key,
-        keys_only=keys_only,
         use_mmap=use_mmap,
     )
     self._read_all = filebasedsource.ReadAllFiles(

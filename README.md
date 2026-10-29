@@ -26,11 +26,10 @@ High-performance Apache Beam Python SDK connector (`ReadFromSSTable`, `ReadAllFr
 - **Exact Wire-Format Compatibility**: Uses TensorFlow `v2.21.0`'s `xla/tsl/lib/io` SSTable implementation (`magic = 0xdb4775248b80fb57`, prefix-compressed data & index blocks, CRC32C block trailers, Snappy compression, sharded LRU block cache).
 - **Splittable `FileBasedSource` Read Path (`ReadFromSSTable`, `ReadAllFromSSTable`)**:
   - Reads only the 48-byte Footer and Index Block at split time (`InspectTableBlocks`) to compute exact SSTable block boundaries.
-  - Supports initial splitting and dynamic work rebalancing (`OffsetRangeTracker`) with zero duplicate or skipped records across sub-file byte splits.
-  - Supports `key_prefix`, `[start_key, end_key)` range scans, and `keys_only=True`.
+  - Supports `key_prefix` and `[start_key, end_key)` range scans.
 - **Resilient, Dynamically-Sharded, Externally-Sorted Write Path (`WriteToSSTable`)**:
   - Built on Apache Beam's `FileBasedSink` (`_SSTableSink`) with runner-determined bundle sharding (`num_shards=0`), `max_records_per_shard` / `max_bytes_per_shard` rollover, two-phase temporary directory staging, and multi-threaded batched finalization.
-  - Out-of-core C++ `SortingSSTableBuilder` that buffers and sorts records in native C++ memory (`py::gil_scoped_release`) up to `max_sorting_memory_mb`, spills sorted intermediate runs to local temporary SSTables if needed, and performs a $K$-way min-heap merge directly into Beam's `FileSystems.create()` buffered channel.
+  - Out-of-core C++ `SortingSSTableBuilder` that buffers and sorts records in native C++ memory (`py::gil_scoped_release`) up to `max_sorting_memory_mb`, spills sorted intermediate runs to local temporary SSTables if needed, and performs a $K$-way min-heap merge.
 
 ---
 
@@ -131,7 +130,7 @@ delocate-wheel -w wheelhouse/ -v dist/*.whl
 
 [`src/apache_beam_sstable/dataflow_load_test.py`](src/apache_beam_sstable/dataflow_load_test.py) runs two separate Beam pipelines:
 1. **Write pipeline (`--mode=write` or `--mode=all`)**: Generates synthetic `(key, value)` records using Beam's `SyntheticSource(algorithm="lcg")` and writes dynamically sharded SSTables via `WriteToSSTable`.
-2. **Read & count verification pipeline (`--mode=read` or `--mode=all`)**: Reads all written SSTables via `ReadFromSSTable(keys_only=True)`, counts total records via `Count.Globally()`, and verifies the count matches `--num_records`.
+2. **Read & count verification pipeline (`--mode=read` or `--mode=all`)**: Reads all written SSTables via `ReadFromSSTable`, counts total records via `Count.Globally()`, and verifies the count matches `--num_records`.
 
 ### Local Smoke Test (`DirectRunner`)
 
@@ -163,6 +162,13 @@ WHEEL_PATH=$(ls wheelhouse/apache_beam_sstable-*manylinux*_x86_64.whl | head -n 
   --max_bytes_per_shard=536870912 \
   --extra_package="${WHEEL_PATH}"
 ```
+
+Single Worker Baseline (`--max_num_workers=1`, 1 `e2-standard-2` VM, 2 vCPUs):
+
+| Pipeline Phase | Throughput (Records/s) | Throughput (Raw MB/s) | Notes |
+| :--- | :---: | :---: | :--- |
+| **Write (`WriteToSSTable`)** | ~28,800 rec/s | ~29.5 MB/s | Beam 2.77.0 bottlenecked by upstream Python `SyntheticSource` ([#40540](https://github.com/apache/beam/pull/40540)). Fixed in upcoming Beam 2.78.0 |
+| **Read (`ReadFromSSTable`)** | ~90,800 rec/s | ~92.9 MB/s | - |
 
 ---
 

@@ -195,8 +195,7 @@ def run_load_test(argv: list[str] | None = None) -> None:
     with beam.Pipeline(options=pipeline_options) as p:
       read_count = (
           p
-          | "ReadSSTables"
-          >> ReadFromSSTable(file_pattern=file_pattern, keys_only=True)
+          | "ReadSSTables" >> ReadFromSSTable(file_pattern=file_pattern)
           | "CountRecords" >> beam.combiners.Count.Globally()
           | "VerifyCount"
           >> beam.ParDo(_VerifyRecordCountDoFn(known_args.num_records))

@@ -20,6 +20,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_TAG="${PYTHON_TAG:-3.11}"
+PY_ABI="cp${PYTHON_TAG//./}"
 BEAM_VERSION="${BEAM_VERSION:-2.77.0}"
 BUILD_IMAGE="docker.io/library/python:${PYTHON_TAG}-bookworm"
 BEAM_SDK_IMAGE="docker.io/apache/beam_python${PYTHON_TAG}_sdk:${BEAM_VERSION}"
@@ -32,6 +33,7 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
 
   "${CONTAINER_ENGINE}" run --rm \
     --platform linux/amd64 \
+    -e PY_ABI="${PY_ABI}" \
     -v "${REPO_ROOT}:/workspace" \
     -w /workspace \
     "${BUILD_IMAGE}" \
@@ -53,7 +55,7 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
 
       python -m build --wheel --no-isolation -Cbuild-dir=/workspace/build/linux_x86_64 --outdir /tmp/dist /workspace
       auditwheel repair /tmp/dist/*.whl -w /tmp/wheelhouse
-      rm -f /workspace/wheelhouse/apache_beam_sstable-*linux*.whl
+      rm -f /workspace/wheelhouse/apache_beam_sstable-*-"${PY_ABI}"-"${PY_ABI}"-*linux*.whl
       cp /tmp/wheelhouse/*.whl /workspace/wheelhouse/
       ls -lh /workspace/wheelhouse/*.whl
     '
@@ -63,13 +65,14 @@ echo "2. Verifying wheel installation and tests inside ${BEAM_SDK_IMAGE}..."
 
 "${CONTAINER_ENGINE}" run --rm \
   --platform linux/amd64 \
+  -e PY_ABI="${PY_ABI}" \
   -v "${REPO_ROOT}:/workspace" \
   -w /tmp \
   --entrypoint /bin/bash \
   "${BEAM_SDK_IMAGE}" \
   -c '
     set -euo pipefail
-    pip install --no-deps /workspace/wheelhouse/apache_beam_sstable-*manylinux*_x86_64.whl
+    pip install --no-deps /workspace/wheelhouse/apache_beam_sstable-*-"${PY_ABI}"-"${PY_ABI}"-*manylinux*_x86_64.whl
     echo "--- Testing C++ extension module (sstable_test.py) ---"
     python -X faulthandler /workspace/src/apache_beam_sstable/sstable_test.py -v
     echo "--- Testing Beam PTransforms (sstableio_test.py) ---"
